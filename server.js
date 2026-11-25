@@ -6,7 +6,8 @@ const crypto = require("crypto");
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
-app.use(express.static("public"));
+const path = require("path");
+app.use(express.static(path.join(__dirname, "public")));
 
 const rooms = new Map();
 const makeCode = () => Math.random().toString(36).slice(2, 6).toUpperCase();
