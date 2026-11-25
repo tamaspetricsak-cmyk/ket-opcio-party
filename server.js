@@ -2,11 +2,11 @@ const express = require("express");
 const http = require("http");
 const { WebSocketServer } = require("ws");
 const crypto = require("crypto");
+const path = require("path");
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
-const path = require("path");
 app.use(express.static(path.join(__dirname, "public")));
 
 const rooms = new Map();
