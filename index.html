@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Két opció • Party</title>
+<style>
+:root{color-scheme:dark;--bg:#0c1413;--panel:#172321;--line:#29413c;--accent:#50c7c3;--muted:#9bb0aa}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#eef7f4;font:16px system-ui,-apple-system,sans-serif}
+main{max-width:560px;margin:auto;padding:22px 16px 48px}.brand{font-size:13px;letter-spacing:.16em;color:var(--accent);font-weight:800}
+h1{font-size:32px;margin:8px 0 4px}p{color:var(--muted);line-height:1.5}.card{background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:18px;margin-top:16px}
+input,button{font:inherit;border-radius:14px;padding:14px;width:100%;border:1px solid var(--line);background:#0e1917;color:#fff;margin-top:9px}
+button{background:var(--accent);color:#06201e;border:0;font-weight:800;cursor:pointer}button.secondary{background:#263a36;color:#eef7f4}button:disabled{opacity:.4}
+.row{display:flex;gap:9px}.row>*{min-width:0}.hidden{display:none!important}.pill{display:inline-block;background:#263a36;border-radius:99px;padding:6px 11px;color:var(--accent);font-size:13px}
+.player{padding:10px 0;border-bottom:1px solid var(--line)}.option{background:#203631;color:white;border:1px solid #3b6259;text-align:left;margin-top:12px;font-size:18px}
+.option:active{transform:scale(.99)}.big{font-size:25px;font-weight:800;letter-spacing:.08em;color:var(--accent)}
+.notice{color:#ffc878;min-height:24px}.muted{color:var(--muted);font-size:14px}
+</style></head>
+<body><main>
+<div class="brand">KÉT OPCIÓ • PARTY</div><h1>te melyiket választod?</h1>
+<p>privát lobby 4–5 főre. minden körben más játékos ír két opciót, a többiek szavaznak.</p>
+<section id="entry" class="card">
+<label>játékosneved</label><input id="name" maxlength="18" placeholder="pl. Dani">
+<button id="create">új lobby létrehozása</button>
+<div class="muted" style="text-align:center;margin:10px">vagy csatlakozz egy meglévőhöz</div>
+<div class="row"><input id="code" maxlength="4" placeholder="KÓD" style="text-transform:uppercase"><button id="join" class="secondary">belépés</button></div>
+</section>
+<section id="game" class="hidden">
+<div class="card"><div class="row" style="justify-content:space-between;align-items:center"><span class="pill">LOBBY <b id="roomCode"></b></span><span class="pill" id="round">várakozás</span></div>
+<div id="players" style="margin-top:12px"></div><div id="hostControls"><button id="start">játék indítása</button><p class="muted">a lobby létrehozója indíthatja. legalább 4 játékos szükséges.</p></div></div>
+<div class="card"><div id="status">várakozás a játékosokra…</div>
+<div id="writerForm" class="hidden"><p>te vagy a kiválasztott játékos! írj be pontosan két opciót.</p><input id="optA" maxlength="90" placeholder="első opció"><input id="optB" maxlength="90" placeholder="második opció"><button id="submit">opciók beküldése</button></div>
+<div id="waiting" class="hidden"><p class="muted">várakozás, amíg a kiválasztott játékos megadja a két opciót…</p></div>
+<div id="voteArea" class="hidden"><p>melyiket választod?</p><button class="option" id="voteA"></button><button class="option" id="voteB"></button><p class="muted" id="voteStatus"></p></div>
+<div id="results" class="hidden"><h2>eredmény</h2><div id="resultText"></div><button id="next">következő kör</button><p class="muted">a lobby létrehozója léptetheti tovább a játékot.</p></div>
+</div></section><p class="notice" id="notice"></p>
+</main>
+<script>
+let ws, myId, code, isHost=false, voted=false, stateNow;
+const $=id=>document.getElementById(id);
+function connect(){return new Promise((resolve,reject)=>{ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);ws.onopen=resolve;ws.onerror=reject;
+ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='error')$('notice').textContent=m.message;
+if(m.type==='joined'){myId=m.id;code=m.code;$('entry').classList.add('hidden');$('game').classList.remove('hidden');$('roomCode').textContent=code;isHost=isHost||false}
+if(m.type==='state')render(m.state,m.myId);
+};});}
+async function join(create){$('notice').textContent='';if(!ws||ws.readyState!==1)await connect();isHost=create;ws.send(JSON.stringify({type:'join',create,name:$('name').value,code:$('code').value}));}
+$('create').onclick=()=>join(true);$('join').onclick=()=>join(false);
+$('start').onclick=()=>ws.send('{"type":"start"}');$('submit').onclick=()=>ws.send(JSON.stringify({type:'submitOptions',a:$('optA').value,b:$('optB').value}));
+$('voteA').onclick=()=>vote(0);$('voteB').onclick=()=>vote(1);function vote(choice){if(voted)return;voted=true;ws.send(JSON.stringify({type:'vote',choice}));$('voteArea').classList.add('hidden');$('status').textContent='szavazat elküldve!';}
+$('next').onclick=()=>ws.send('{"type":"next"}');
+function show(id,on){$(id).classList.toggle('hidden',!on)}
+function render(s,id){stateNow=s;myId=id;$('roomCode').textContent=s.code;$('round').textContent=s.phase==='lobby'?'lobby':`kör ${s.round}`;
+$('players').innerHTML=s.players.map((p,i)=>`<div class="player">${i===0?'👑 ':''}${esc(p.name)} ${p.id===id?'(te)':''} ${p.connected?'':' · lecsatlakozott'}</div>`).join('');
+show('hostControls',s.phase==='lobby'&&isHost);$('start').disabled=s.players.length<4;
+show('writerForm',s.phase==='writing'&&s.writerId===id);show('waiting',s.phase==='writing'&&s.writerId!==id);
+show('voteArea',s.phase==='voting'&&s.writerId!==id&&!voted);show('results',s.phase==='results');
+if(s.phase==='writing')$('status').textContent=s.writerId===id?'te írod a két opciót':`${s.writerName} írja a két opciót…`;
+if(s.phase==='voting'){$('status').textContent=`${s.writerName} opciói`;$('voteA').textContent=s.options[0];$('voteB').textContent=s.options[1];$('voteStatus').textContent=`szavazatok: ${s.votes}/${s.totalVoters}`;}
+if(s.phase==='results'){$('status').textContent='mindenki szavazott!';$('resultText').innerHTML=`<p>${esc(s.options[0])}: <b>${s.results[0]} szavazat</b></p><p>${esc(s.options[1])}: <b>${s.results[1]} szavazat</b></p>`;$('next').disabled=!isHost;}
+if(s.phase!=='voting')voted=false;
+}
+function esc(x){return String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+</script></body></html>
